@@ -5,7 +5,10 @@ const sDirDestination = path.join(__dirname, 'project-dist');
 
 const sDirComponents = path.join(__dirname, 'components');
 const sPathHtmlTemplate = path.join(__dirname, 'template.html');
-const sPathHtmlBundle = path.join(__dirname, 'project-dist', 'index.html');
+const sPathHtmlBundle = path.join(sDirDestination, 'index.html');
+
+const sPathCssSource = path.join(__dirname, 'styles');
+const sPathCssDestination = path.join(sDirDestination, 'style.css');
 
 // Create destination folder
 fs.mkdir(sDirDestination, { recursive: true },
@@ -66,5 +69,45 @@ function getReplaceTemplate(data) {
 stream.on('data', chunk => sTemplateData += chunk);
 stream.on('end', () => {
   const oReplaceTemplate = getReplaceTemplate(sTemplateData);
-  replaceData(sTemplateData, oReplaceTemplate, 0);
-});  
+  if (oReplaceTemplate.length > 0) {
+    replaceData(sTemplateData, oReplaceTemplate, 0);
+  }
+});
+
+// Process of CSS file
+function writeFile(content, source, destination, files, i) {
+  const info = path.parse(files[i].name);
+
+  if (files[i].isFile() && info.ext === '.css') {
+    content += '\n';
+
+    const stream = fs.createReadStream(path.join(source, files[i].name), 'utf-8');
+    stream.on('data', chunk => content += chunk);
+
+    if (i < files.length - 1) {
+      stream.on('end', () => writeFile(content, source, destination, files, i + 1));
+    } else {
+      stream.on('end', () => {
+        const output = fs.createWriteStream(destination);
+        output.write(content);
+      });
+    }
+  } else {
+    writeFile(content, source, destination, files, i + 1);
+  }
+}
+
+function mergeStyles(source, destination) {
+  let content = '';
+
+  fs.readdir(source, { withFileTypes: true },
+    (error, files) => {
+      if (error)
+        console.log(error);
+      else {
+        writeFile(content, source, destination, files, 0);
+      }
+    });
+}
+
+mergeStyles(sPathCssSource, sPathCssDestination);
