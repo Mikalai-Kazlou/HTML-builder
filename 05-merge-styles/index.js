@@ -4,25 +4,18 @@ const path = require('path');
 const sSourcePath = path.join(__dirname, 'styles');
 const sDestinationPath = path.join(__dirname, 'project-dist', 'bundle.css');
 
-function writeFile(content, source, destination, files, i) {
-  const info = path.parse(files[i].name);
+function mergeFile(content, source, destination, files, i) {
+  content += '\n';
+  const stream = fs.createReadStream(path.join(source, files[i].name), 'utf-8');
+  stream.on('data', chunk => content += chunk);
 
-  if (files[i].isFile() && info.ext === '.css') {
-    content += '\n';
-
-    const stream = fs.createReadStream(path.join(source, files[i].name), 'utf-8');
-    stream.on('data', chunk => content += chunk);
-
-    if (i < files.length - 2) { //TODO: files.length - 2 is not correct
-      stream.on('end', () => writeFile(content, source, destination, files, i + 1));
-    } else {
-      stream.on('end', () => {
-        const output = fs.createWriteStream(destination);
-        output.write(content);
-      });
-    }
+  if (i < files.length - 1) {
+    stream.on('end', () => mergeFile(content, source, destination, files, i + 1));
   } else {
-    writeFile(content, source, destination, files, i + 1);
+    stream.on('end', () => {
+      const output = fs.createWriteStream(destination);
+      output.write(content);
+    });
   }
 }
 
@@ -34,7 +27,16 @@ function mergeStyles(source, destination) {
       if (error)
         console.log(error);
       else {
-        writeFile(content, source, destination, files, 0);
+        const cssFiles = [];
+
+        files.forEach(file => {
+          const info = path.parse(file.name);
+          if (file.isFile() && info.ext === '.css') {
+            cssFiles.push(file);
+          }
+        });
+
+        mergeFile(content, source, destination, cssFiles, 0);
       }
     });
 }
