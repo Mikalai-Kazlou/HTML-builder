@@ -10,6 +10,9 @@ const sPathHtmlBundle = path.join(sDirDestination, 'index.html');
 const sPathCssSource = path.join(__dirname, 'styles');
 const sPathCssDestination = path.join(sDirDestination, 'style.css');
 
+const sPathAssetsSource = path.join(__dirname, 'assets');
+const sPathAssetsDestination = path.join(sDirDestination, 'assets');
+
 // Create destination folder
 fs.mkdir(sDirDestination, { recursive: true },
   (error) => {
@@ -111,3 +114,108 @@ function mergeStyles(source, destination) {
 }
 
 mergeStyles(sPathCssSource, sPathCssDestination);
+
+// Copy assets
+function deleteDirectory(dir) {
+  fs.readdir(dir,
+    (error, files) => {
+      if (error) {
+        console.log(error);
+      }
+      else {
+        if (files.length === 0) {
+          fs.rmdir(dir,
+            (error) => {
+              if (error) {
+                console.log(error);
+              }
+            });
+        } else {
+          deleteDirectory(dir);
+        }
+      }
+    });
+}
+
+function deleteFiles(dir) {
+  fs.readdir(dir, { withFileTypes: true },
+    (error, files) => {
+      if (error)
+        console.log(error);
+      else {
+        files.forEach(file => {
+          if (file.isFile()) {
+            fs.unlink(path.join(dir, file.name),
+              (error) => {
+                if (error) {
+                  console.log(error);
+                }
+              });
+          }
+          if (file.isDirectory()) {
+            deleteFiles(path.join(dir, file.name));
+            deleteDirectory(path.join(dir, file.name));
+          }
+        });
+      }
+    });
+}
+
+function copyFiles(source, destination) {
+  fs.readdir(source, { withFileTypes: true },
+    (error, files) => {
+      if (error)
+        console.log(error);
+      else {
+        files.forEach(file => {
+          if (file.isFile()) {
+            fs.copyFile(path.join(source, file.name), path.join(destination, file.name),
+              (error) => {
+                if (error) {
+                  console.log(error);
+                }
+              });
+          }
+          if (file.isDirectory()) {
+            fs.mkdir(path.join(destination, file.name), { recursive: true },
+              (error) => {
+                if (error) {
+                  console.log(error);
+                }
+              });
+            copyFiles(path.join(source, file.name), path.join(destination, file.name));
+          }
+        })
+      }
+    });
+}
+
+function startCopyFiles(source, destination) {
+  fs.readdir(destination,
+    (error, files) => {
+      if (error) {
+        console.log(error);
+      }
+      else {
+        if (files.length === 0) {
+          copyFiles(source, destination);
+        } else {
+          startCopyFiles(source, destination);
+        }
+      }
+    });
+}
+
+function copyDir(source, destination) {
+  fs.mkdir(destination, { recursive: true },
+    (error) => {
+      if (error) {
+        console.log(error);
+      }
+    });
+
+  deleteFiles(destination);
+  startCopyFiles(source, destination);
+}
+
+copyDir(sPathAssetsSource, sPathAssetsDestination);
