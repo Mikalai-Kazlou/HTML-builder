@@ -4,13 +4,13 @@ const path = require('path');
 const sSourcePath = path.join(__dirname, 'styles');
 const sDestinationPath = path.join(__dirname, 'project-dist', 'bundle.css');
 
-function mergeFile(content, source, destination, files, i) {
+function mergeFiles(content, source, destination, files, i) {
   content += '\n';
   const stream = fs.createReadStream(path.join(source, files[i].name), 'utf-8');
   stream.on('data', chunk => content += chunk);
 
   if (i < files.length - 1) {
-    stream.on('end', () => mergeFile(content, source, destination, files, i + 1));
+    stream.on('end', () => mergeFiles(content, source, destination, files, i + 1));
   } else {
     stream.on('end', () => {
       const output = fs.createWriteStream(destination);
@@ -36,7 +36,7 @@ function mergeStyles(source, destination) {
           }
         });
 
-        mergeFile(content, source, destination, cssFiles, 0);
+        mergeFiles(content, source, destination, cssFiles, 0);
       }
     });
 }

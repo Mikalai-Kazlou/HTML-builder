@@ -22,29 +22,26 @@ fs.mkdir(sDirDestination, { recursive: true },
   });
 
 // Process of HTML file
-const stream = fs.createReadStream(sPathHtmlTemplate, 'utf-8');
-const output = fs.createWriteStream(sPathHtmlBundle);
-let sTemplateData = '';
-
-function replaceData(data, oReplaceTemplate, i) {
-  const input = fs.createReadStream(path.join(sDirComponents, oReplaceTemplate[i].fileName), 'utf-8');
+function replaceData(data, oReplaceTemplate, i, bundle) {
+  const input = fs.createReadStream(oReplaceTemplate[i].filePath, 'utf-8');
   let fileContent = '';
 
   input.on('data', chunk => fileContent += chunk);
   if (i < oReplaceTemplate.length - 1) {
     input.on('end', () => {
       data = data.replace(oReplaceTemplate[i].tag, fileContent);
-      replaceData(data, oReplaceTemplate, i + 1);
+      replaceData(data, oReplaceTemplate, i + 1, bundle);
     });
   } else {
     input.on('end', () => {
       data = data.replace(oReplaceTemplate[i].tag, fileContent);
+      const output = fs.createWriteStream(bundle);
       output.write(data);
     });
   }
 }
 
-function getReplaceTemplate(data) {
+function getReplaceTemplate(data, components) {
   const result = [];
 
   function findNextTag(data, index) {
@@ -61,7 +58,7 @@ function getReplaceTemplate(data) {
     const fileName = oTag.tag.slice(2, -2) + '.html';
     result.push({
       tag: oTag.tag,
-      fileName: fileName
+      filePath: path.join(components, fileName)
     });
     oTag = findNextTag(data, oTag.index);
   }
@@ -69,34 +66,34 @@ function getReplaceTemplate(data) {
   return result;
 }
 
-stream.on('data', chunk => sTemplateData += chunk);
-stream.on('end', () => {
-  const oReplaceTemplate = getReplaceTemplate(sTemplateData);
-  if (oReplaceTemplate.length > 0) {
-    replaceData(sTemplateData, oReplaceTemplate, 0);
-  }
-});
+function mergeHtml(template, components, bundle) {
+  let sTemplateData = '';
+  const stream = fs.createReadStream(template, 'utf-8');
+
+  stream.on('data', chunk => sTemplateData += chunk);
+  stream.on('end', () => {
+    const oReplaceTemplate = getReplaceTemplate(sTemplateData, components);
+    if (oReplaceTemplate.length > 0) {
+      replaceData(sTemplateData, oReplaceTemplate, 0, bundle);
+    }
+  });
+}
+
+mergeHtml(sPathHtmlTemplate, sDirComponents, sPathHtmlBundle);
 
 // Process of CSS file
-function writeFile(content, source, destination, files, i) {
-  const info = path.parse(files[i].name);
+function mergeFiles(content, source, destination, files, i) {
+  content += '\n';
+  const stream = fs.createReadStream(path.join(source, files[i].name), 'utf-8');
+  stream.on('data', chunk => content += chunk);
 
-  if (files[i].isFile() && info.ext === '.css') {
-    content += '\n';
-
-    const stream = fs.createReadStream(path.join(source, files[i].name), 'utf-8');
-    stream.on('data', chunk => content += chunk);
-
-    if (i < files.length - 1) {
-      stream.on('end', () => writeFile(content, source, destination, files, i + 1));
-    } else {
-      stream.on('end', () => {
-        const output = fs.createWriteStream(destination);
-        output.write(content);
-      });
-    }
+  if (i < files.length - 1) {
+    stream.on('end', () => mergeFiles(content, source, destination, files, i + 1));
   } else {
-    writeFile(content, source, destination, files, i + 1);
+    stream.on('end', () => {
+      const output = fs.createWriteStream(destination);
+      output.write(content);
+    });
   }
 }
 
@@ -108,7 +105,16 @@ function mergeStyles(source, destination) {
       if (error)
         console.log(error);
       else {
-        writeFile(content, source, destination, files, 0);
+        const cssFiles = [];
+
+        files.forEach(file => {
+          const info = path.parse(file.name);
+          if (file.isFile() && info.ext === '.css') {
+            cssFiles.push(file);
+          }
+        });
+
+        mergeFiles(content, source, destination, cssFiles, 0);
       }
     });
 }
@@ -119,10 +125,7 @@ mergeStyles(sPathCssSource, sPathCssDestination);
 function deleteDirectory(dir) {
   fs.readdir(dir,
     (error, files) => {
-      if (error) {
-        console.log(error);
-      }
-      else {
+      if (!error) {
         if (files.length === 0) {
           fs.rmdir(dir,
             (error) => {
@@ -140,9 +143,7 @@ function deleteDirectory(dir) {
 function deleteFiles(dir) {
   fs.readdir(dir, { withFileTypes: true },
     (error, files) => {
-      if (error)
-        console.log(error);
-      else {
+      if (!error) {
         files.forEach(file => {
           if (file.isFile()) {
             fs.unlink(path.join(dir, file.name),
@@ -164,8 +165,9 @@ function deleteFiles(dir) {
 function copyFiles(source, destination) {
   fs.readdir(source, { withFileTypes: true },
     (error, files) => {
-      if (error)
+      if (error) {
         console.log(error);
+      }
       else {
         files.forEach(file => {
           if (file.isFile()) {
@@ -183,7 +185,8 @@ function copyFiles(source, destination) {
                   console.log(error);
                 }
               });
-            copyFiles(path.join(source, file.name), path.join(destination, file.name));
+
+            startCopyFiles(path.join(source, file.name), path.join(destination, file.name));
           }
         })
       }
@@ -191,19 +194,25 @@ function copyFiles(source, destination) {
 }
 
 function startCopyFiles(source, destination) {
-  fs.readdir(destination,
-    (error, files) => {
-      if (error) {
-        console.log(error);
-      }
-      else {
-        if (files.length === 0) {
-          copyFiles(source, destination);
-        } else {
-          startCopyFiles(source, destination);
-        }
-      }
-    });
+  fs.stat(destination, (error) => {
+    if (error) {
+      startCopyFiles(source, destination);
+    } else {
+      fs.readdir(destination,
+        (error, files) => {
+          if (error) {
+            startCopyFiles(source, destination);
+          }
+          else {
+            if (files.length === 0) {
+              copyFiles(source, destination);
+            } else {
+              startCopyFiles(source, destination);
+            }
+          }
+        });
+    }
+  });
 }
 
 function copyDir(source, destination) {

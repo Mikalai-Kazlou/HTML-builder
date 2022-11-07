@@ -41,6 +41,22 @@ function copyFiles(source, destination) {
     });
 }
 
+function startCopyFiles(source, destination) {
+  fs.readdir(destination,
+    (error, files) => {
+      if (error) {
+        console.log(error);
+      }
+      else {
+        if (files.length === 0) {
+          copyFiles(source, destination);
+        } else {
+          startCopyFiles(source, destination);
+        }
+      }
+    });
+}
+
 function copyDir(source, destination) {
   fs.mkdir(destination, { recursive: true },
     (error) => {
@@ -52,7 +68,7 @@ function copyDir(source, destination) {
   fs.readdir(destination, { withFileTypes: true },
     (error, files) => {
       deleteFiles(destination, error, files);
-      copyFiles(source, destination);
+      startCopyFiles(source, destination);
     });
 }
 

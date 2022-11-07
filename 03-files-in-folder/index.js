@@ -10,7 +10,7 @@ function showFileInfo(file) {
         console.log(error);
       else {
         const info = path.parse(file.name);
-        console.log(`${info.name} - ${info.ext.slice(1)} - ${stats.size}b`);
+        console.log(`${info.name} - ${info.ext.slice(1)} - ${stats.size} byte`);
       }
     });
 }
